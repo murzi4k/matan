@@ -254,7 +254,7 @@ function emptyMsg(text) {
 /* ================= Навигация ================= */
 const TITLES = {
   home: 'Матанализ', cards: 'Карточки', proof: 'Доказательства', srs: 'Повторение',
-  ticket: 'Билет', progress: 'Прогресс', detail: 'Карточка',
+  ticket: 'Билет', progress: 'Прогресс', detail: 'Карточка', paragraphs: 'По параграфам', learn: 'Параграф',
 };
 
 function go(view, session) {
@@ -280,7 +280,10 @@ if (tgAtLeast('6.1')) tg.BackButton.onClick(back);
 
 function render() {
   const v = current();
-  $('#screenTitle').textContent = v === 'srs' && state.session && state.session.weak ? 'Слабые карточки' : TITLES[v];
+  $('#screenTitle').textContent =
+    v === 'srs' && state.session && state.session.weak ? 'Слабые карточки'
+      : v === 'learn' && state.session ? `${state.session.par.id} ${state.session.par.title}`
+        : TITLES[v];
   const root = state.stack.length <= 1;
   if (tgAtLeast('6.1')) {
     root ? tg.BackButton.hide() : tg.BackButton.show();
@@ -288,9 +291,9 @@ function render() {
   } else {
     backBtn.hidden = root;
   }
-  $('#filterBtn').hidden = ['progress', 'detail'].includes(v);
+  $('#filterBtn').hidden = ['progress', 'detail', 'paragraphs', 'learn'].includes(v);
   updateFilterChip();
-  app.replaceChildren(...[].concat(VIEWS[v]()));
+  app.replaceChildren(...[].concat(VIEWS[v]()).flat().filter(x => x != null && x !== false));
 }
 
 /* ================= Экраны ================= */
@@ -320,6 +323,9 @@ const VIEWS = {
       results,
       h('p', { class: 'muted small', text: `В выборке: ${list.length} из ${CARDS.length} карточек` }),
       h('div', { class: 'tiles' },
+        h('button', { class: 'tile wide', onclick: () => go('paragraphs') },
+          h('div', { class: 'ico', text: '📚' }), h('b', { text: 'По параграфам' }),
+          h('span', { text: lastPos() ? `Продолжить: ${lastPos().par.id}, карточка ${lastPos().i + 1} из ${lastPos().list.length}` : 'Учить §1, §2, … по порядку' })),
         tile('🃏', 'Карточки', 'Вопрос → ответ → самооценка', () => go('cards', INIT.cards())),
         tile('🪜', 'Доказательства', 'Шаги открываются по одному', () => go('proof', INIT.proof())),
         tile('🔁', 'Повторение', 'Лейтнер, 5 коробок', () => go('srs', INIT.srs(false))),
@@ -473,6 +479,114 @@ const VIEWS = {
       h('p', { class: 'muted small center', text: useCloud ? 'Прогресс хранится в Telegram и синхронизируется между устройствами.' : 'Прогресс хранится в этом браузере (localStorage).' }),
     ];
   },
+};
+
+/* ---------- Учить по параграфам ---------- */
+function lastPos() {
+  const pos = progress.pos;
+  if (!pos) return null;
+  const par = PARAGRAPHS.find(p => p.id === pos.p);
+  if (!par) return null;
+  const list = CARDS.filter(c => c.paragraph === par.id);
+  return pos.i < list.length ? { par, list, i: pos.i } : null;
+}
+
+function setPos(s) {
+  if (s.i < s.list.length) progress.pos = { p: s.par.id, i: s.i };
+  else {
+    const next = PARAGRAPHS[PARAGRAPHS.indexOf(s.par) + 1];
+    progress.pos = next ? { p: next.id, i: 0 } : null;
+  }
+  saveProgress();
+}
+
+function openPar(par, i = 0, replace = false) {
+  const session = { par, list: CARDS.filter(c => c.paragraph === par.id), i, revealed: false, shown: 0, stats: [0, 0, 0] };
+  setPos(session);
+  if (replace) { state.session = session; render(); window.scrollTo(0, 0); }
+  else go('learn', session);
+}
+
+function parStats(par) {
+  const list = CARDS.filter(c => c.paragraph === par.id);
+  const cs = { total: list.length };
+  let learned = 0;
+  list.forEach(c => { const b = boxOf(c); cs[b] = (cs[b] || 0) + 1; if (b >= LEARNED_BOX) learned++; });
+  return { cs, learned };
+}
+
+const BOX_COLORS = ['var(--sep)', 'var(--bad)', '#f08c3a', 'var(--mid)', '#8bc34a', 'var(--good)'];
+function boxBar(cs) {
+  return h('div', { class: 'bar' },
+    [1, 2, 3, 4, 5].map(b => cs[b] ? h('i', { style: `width:${cs[b] / cs.total * 100}%;background:${BOX_COLORS[b]}` }) : null));
+}
+
+VIEWS.paragraphs = function () {
+  const lp = lastPos();
+  return [
+    lp ? btn(`Продолжить: ${lp.par.id}, карточка ${lp.i + 1} из ${lp.list.length}`, () => openPar(lp.par, lp.i), 'primary wide') : null,
+    h('p', { class: 'muted small', text: 'Карточки параграфа идут в том порядке, как в конспекте. Оценки двигают карточки по коробкам, как в остальных режимах.' }),
+    h('div', { class: 'list' }, PARAGRAPHS.map(p => {
+      const { cs, learned } = parStats(p);
+      const isCur = lp && lp.par === p;
+      return h('button', { class: 'list-item', onclick: () => openPar(p, isCur ? lp.i : 0) },
+        h('div', { class: 'row-between', style: 'margin:0' },
+          h('span', null, h('b', { text: p.id + ' ' }), p.title),
+          h('span', { class: 'muted small', style: 'white-space:nowrap', text: `${learned}/${cs.total}` })),
+        boxBar(cs),
+        isCur ? h('div', { class: 'meta', text: `▶ остановился на карточке ${lp.i + 1}` }) : null);
+    })),
+  ];
+};
+
+VIEWS.learn = function () {
+  const s = state.session;
+  const next = PARAGRAPHS[PARAGRAPHS.indexOf(s.par) + 1];
+  if (s.i >= s.list.length) {
+    const { cs, learned } = parStats(s.par);
+    return h('div', { class: 'card center' },
+      h('h3', { text: `${s.par.id} пройден` }),
+      h('p', { class: 'muted', text: `Знаю: ${s.stats[2]} · С трудом: ${s.stats[1]} · Не знаю: ${s.stats[0]}` }),
+      h('p', { class: 'muted small', text: `Выучено в параграфе: ${learned} из ${cs.total}` }),
+      next
+        ? btn(`Дальше: ${next.id} ${next.title}`, () => openPar(next, 0, true), 'primary wide')
+        : h('p', { text: 'Это был последний параграф 🎉' }),
+      btn('Пройти параграф ещё раз', () => openPar(s.par, 0, true), 'wide'),
+      btn('К списку параграфов', back, 'wide'));
+  }
+  const c = s.list[s.i];
+  const total = hasProof(c) ? c.proof_steps.length : 0;
+  const move = d => {
+    s.i = Math.max(0, s.i + d); s.revealed = false; s.shown = 0;
+    setPos(s); render(); window.scrollTo(0, 0);
+  };
+  const nav = h('div', { class: 'row-between' },
+    h('button', { class: 'chip', text: '‹ Пред.', disabled: s.i === 0, onclick: () => move(-1) }),
+    h('span', { class: 'muted small', text: `${s.i + 1} / ${s.list.length}` }),
+    h('button', { class: 'chip', text: 'След. ›', onclick: () => move(1) }));
+
+  let body;
+  if (!s.revealed) {
+    body = h('div', { class: 'btn-row' },
+      btn('Пропустить', () => move(1)),
+      btn('Показать ответ', () => { s.revealed = true; render(); }, 'primary'));
+  } else {
+    const proofDone = s.shown >= total;
+    body = [
+      h('div', { class: 'answer' },
+        statementEl(c),
+        total ? [
+          h('div', { class: 'label', text: `Доказательство · ${s.shown} из ${total}` }),
+          s.shown ? stepsEl(c, s.shown) : h('p', { class: 'muted small', text: 'Вспомни первый шаг и открой его.' }),
+          proofDone ? null : h('div', { class: 'btn-row' },
+            btn('Показать все', () => { s.shown = total; render(); }),
+            btn('Следующий шаг', () => { s.shown++; render(); }, 'primary')),
+        ] : null,
+        proofDone ? notesEl(c) : null),
+      proofDone ? rateRow(c, r => { s.stats[r]++; move(1); }) : null,
+    ];
+  }
+  return [nav, h('div', { class: 'card' }, cardMeta(c), questionEl(c, true), body)];
 };
 
 function renderSearch(container) {

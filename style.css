@@ -136,7 +136,9 @@ main { padding: 12px 16px 32px; max-width: 720px; margin: 0 auto; }
   background: var(--card); border: 0; border-radius: var(--radius); padding: 14px;
   text-align: left; min-height: 96px; display: flex; flex-direction: column; gap: 4px;
 }
+.tile.wide { grid-column: 1 / -1; min-height: 0; }
 .tile b { font-size: 16px; }
+.chip:disabled { opacity: .4; }
 .tile span { font-size: 13px; color: var(--hint); }
 .tile .ico { font-size: 22px; }
 
