@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <title>Матан: коллоквиум</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <button id="backBtn" class="icon-btn" hidden aria-label="Назад">‹</button>
+    <h1 id="screenTitle">Матанализ</h1>
+    <button id="filterBtn" class="chip" aria-label="Фильтр">Фильтр</button>
+  </header>
+  <main id="app"><p class="muted center">Загрузка…</p></main>
+
+  <div id="filterSheet" class="sheet" hidden>
+    <div class="sheet-body">
+      <div class="sheet-head">
+        <h2>Фильтр</h2>
+        <button id="filterClose" class="icon-btn" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="seg" id="typeSeg">
+        <button data-type="all">Все</button>
+        <button data-type="def">Определения</button>
+        <button data-type="thm">Теоремы</button>
+      </div>
+      <div class="row-between">
+        <span class="muted">Параграфы</span>
+        <span>
+          <button id="parAll" class="link">все</button> ·
+          <button id="parNone" class="link">сбросить</button>
+        </span>
+      </div>
+      <div id="parList" class="par-list"></div>
+      <button id="filterApply" class="btn primary wide">Готово</button>
+    </div>
+  </div>
+</body>
+</html>

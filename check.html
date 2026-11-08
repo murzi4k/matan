@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Проверка cards.json</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <style>
+    :root { --bg: #fff; --text: #16181d; --hint: #6b7280; --bad: #d1242f; --good: #1a7f37; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #0e1621; --text: #f5f5f5; --hint: #8a96a3; --bad: #ff6b6b; --good: #4ade80; } }
+    body { background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 16px; }
+    .ok { color: var(--good); } .bad { color: var(--bad); } .muted { color: var(--hint); }
+    li { margin-bottom: 10px; overflow-wrap: anywhere; }
+    code { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Проверка cards.json</h1>
+  <div id="out" class="muted">Проверяю…</div>
+  <script>
+    // Открой эту страницу (…/check.html) после обновления cards.json.
+    const out = document.getElementById('out');
+    const delimiters = [
+      { left: '$$', right: '$$', display: true },
+      { left: '\\[', right: '\\]', display: true },
+      { left: '\\(', right: '\\)', display: false },
+      { left: '$', right: '$', display: false },
+    ];
+    const esc = s => s.replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+    fetch('cards.json', { cache: 'no-cache' })
+      .then(r => r.text())
+      .then(txt => {
+        let data;
+        try { data = JSON.parse(txt); }
+        catch (e) { out.innerHTML = `<p class="bad">Ошибка JSON: ${esc(e.message)}</p>`; return; }
+        const cards = data.cards || [];
+        const problems = [], ids = new Set();
+        const required = ['id', 'paragraph', 'paragraph_title', 'type', 'title', 'statement', 'proof_steps', 'notes'];
+        const div = document.createElement('div');
+        let formulas = 0;
+        for (const c of cards) {
+          for (const k of required) if (!(k in c)) problems.push([c.id, k, 'нет поля']);
+          if (ids.has(c.id)) problems.push([c.id, 'id', 'id повторяется']);
+          ids.add(c.id);
+          const fields = [['title', c.title], ['statement', c.statement], ['notes', c.notes]];
+          (c.proof_steps || []).forEach((s, i) => fields.push([`шаг ${i + 1}`, s]));
+          for (const [name, text] of fields) {
+            if (!text) continue;
+            div.textContent = text;
+            renderMathInElement(div, { delimiters, throwOnError: false });
+            formulas += div.querySelectorAll('.katex').length;
+            div.querySelectorAll('.katex-error').forEach(e => problems.push([c.id, name, e.title || 'ошибка KaTeX', e.textContent]));
+            if (/(^|[^\\])\$/.test(div.textContent)) problems.push([c.id, name, 'незакрытый $ — формула не отрисуется', text.slice(0, 120)]);
+          }
+        }
+        out.innerHTML = `<p>Карточек: <b>${cards.length}</b>, формул: <b>${formulas}</b></p>` +
+          (problems.length
+            ? `<p class="bad">Проблем: ${problems.length}</p><ol>${problems.map(p => `<li><b>${esc(String(p[0]))}</b> · ${esc(p[1])}: ${esc(p[2])}${p[3] ? `<br><code>${esc(p[3])}</code>` : ''}</li>`).join('')}</ol>`
+            : '<p class="ok">✅ Всё в порядке: JSON корректен, все формулы рендерятся.</p>');
+      })
+      .catch(e => { out.innerHTML = `<p class="bad">Не удалось загрузить cards.json: ${esc(e.message)}</p>`; });
+  </script>
+</body>
+</html>
